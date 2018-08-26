@@ -127,7 +127,7 @@ def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Create desktop entries for Steam games.')
-    parser.add_argument('steam_root', help='path to Steam installation')
+    parser.add_argument('steam_root', help='Path to Steam root directory, e.g. ~/.local/share/Steam')
     parser.add_argument('-d', '--datatir', default=None, required=False, help='Destination data dir where to create files (defaults to ~/.local/share)')
     parser.add_argument('-c', '--steam-command', default='xdg-open', required=False, help='Steam command (defaults to xdg-open)')
     args = parser.parse_args()
