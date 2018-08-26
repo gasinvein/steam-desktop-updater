@@ -81,7 +81,7 @@ def get_icons(steam_root, app_info):
     return None
 
 
-def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
+def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
     with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
         appinfo_data = appinfo.load(af)
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
@@ -90,8 +90,8 @@ def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
             if k.isdigit():
                 library_folders.append(v)
 
-    if prefix is None:
-        prefix = os.path.join(os.environ.get('HOME'), '.local', 'share')
+    if destdir is None:
+        destdir = os.path.join(os.environ.get('HOME'), '.local', 'share')
 
     for library_folder in library_folders:
         print('Processing library', library_folder, file=sys.stderr)
@@ -104,7 +104,7 @@ def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
             app_icon_name = f'steam_icon_{app_id}'
             if app_icons is not None:
                 for size, icon_src in app_icons.items():
-                    icon_dest_dir = os.path.join(prefix, 'icons', 'hicolor', f'{size}x{size}', 'apps')
+                    icon_dest_dir = os.path.join(destdir, 'icons', 'hicolor', f'{size}x{size}', 'apps')
                     icon_dest = os.path.join(icon_dest_dir, f'{app_icon_name}.png')
                     os.makedirs(icon_dest_dir, exist_ok=True)
                     shutil.copyfile(icon_src, icon_dest)
@@ -120,7 +120,7 @@ def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
                 'Icon': app_icon_name,
                 'Categories': 'Game;X-Steam;'
             }
-            with open(os.path.join(prefix, 'applications', app_desktop_file), 'w') as df:
+            with open(os.path.join(destdir, 'applications', app_desktop_file), 'w') as df:
                 app_desktop.write(df, space_around_delimiters=False)
 
 
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Create desktop entries for Steam games.')
     parser.add_argument('steam_root', help='path to Steam installation')
-    parser.add_argument('prefix', default=None, nargs='?', help='Data dir where to create files (defaults to ~/.local/share)')
+    parser.add_argument('-d', '--datatir', default=None, required=False, help='Destination data dir where to create files (defaults to ~/.local/share)')
     parser.add_argument('-c', '--steam-command', default='xdg-open', required=False, help='Steam command (defaults to xdg-open)')
     args = parser.parse_args()
-    create_desktop_data(steam_root=args.steam_root, prefix=args.prefix, steam_cmd=args.steam_command)
+    create_desktop_data(steam_root=args.steam_root, destdir=args.datatir, steam_cmd=args.steam_command)
