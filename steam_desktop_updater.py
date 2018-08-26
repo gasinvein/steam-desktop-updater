@@ -72,7 +72,7 @@ def get_icons(steam_root, app_info):
     return None
 
 
-def load_installed_apps(steam_root, prefix=None, steam_cmd='steam'):
+def load_installed_apps(steam_root, prefix=None, steam_cmd='xdg-open'):
     with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
         appinfo_data = appinfo.load(af)
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
