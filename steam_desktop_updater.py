@@ -40,7 +40,7 @@ def extract_icons(steam_root, icon_hash, icon_path):
                             h, w = img.size
                             if h == w:
                                 dest = os.path.join(tmpdir, icon_hash)
-                                print('Extracting', zi.filename, 'to', dest)
+                                print('Extracting', zi.filename, file=sys.stderr)
                                 zf.extract(zi.filename, dest)
                                 icons[h] = os.path.join(dest, zi.filename)
                             img.close()
@@ -55,7 +55,7 @@ def extract_icons(steam_root, icon_hash, icon_path):
                     img.save(dest, 'png')
                     icons[h] = dest
         except OSError as e:
-            print(icon_path, ":", e, file=sys.stderr)
+            print(os.path.relpath(icon_path, steam_root), ":", e, file=sys.stderr)
     else:
         raise ValueError('Don\'t know how to handle', icon_path)
     return icons
@@ -71,11 +71,13 @@ def get_icons(steam_root, app_info):
     for i in [b'linuxclienticon', b'clienticon', b'clienticns', b'clienttga', b'icon', b'logo', b'logo_small']:
         if i in common_info:
             icon_hash = common_info[i].decode()
-            print(i, 'is set, searching it...')
+            print(i, 'is set, searching it... ', end='', file=sys.stderr)
             for fmt in ['zip', 'ico']:
-                icon_path = os.path.join(icons_dir, icon_hash + '.' + fmt)
+                icon_path = os.path.join(icons_dir, f'{icon_hash}.{fmt}')
                 if os.path.isfile(icon_path):
+                    print('found', os.path.relpath(icon_path, steam_root), file=sys.stderr)
                     return extract_icons(steam_root, icon_hash, icon_path)
+            print('not found', file=sys.stderr)
     return None
 
 
@@ -87,15 +89,16 @@ def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
         for k, v in acf.load(lf)['LibraryFolders'].items():
             if k.isdigit():
                 library_folders.append(v)
-        print(library_folders)
 
     if prefix is None:
         prefix = os.path.join(os.environ.get('HOME'), '.local', 'share')
 
     for library_folder in library_folders:
+        print('Processing library', library_folder, file=sys.stderr)
         for app_id in get_installed_apps(library_folder):
             app_info = appinfo_data[int(app_id)]
-            print(app_info['sections'][b'appinfo'][b'common'][b'name'])
+            app_name = app_info['sections'][b'appinfo'][b'common'][b'name'].decode()
+            print('Processing app ID', app_id, ':', app_name, file=sys.stderr)
 
             app_icons = get_icons(steam_root, app_info)
             app_icon_name = f'steam_icon_{app_id}'
@@ -111,7 +114,7 @@ def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
             app_desktop.optionxform = str
             app_desktop['Desktop Entry'] = {
                 'Type': 'Application',
-                'Name': app_info['sections'][b'appinfo'][b'common'][b'name'].decode(),
+                'Name': app_name,
                 'Comment': 'Launch this game via Steam',
                 'Exec': f'{steam_cmd} steam://rungameid/{app_id}',
                 'Icon': app_icon_name,
