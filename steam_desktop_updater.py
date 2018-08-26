@@ -119,6 +119,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Create desktop entries for Steam games.')
     parser.add_argument('steam_root', help='path to Steam installation')
     parser.add_argument('prefix', default=None, nargs='?', help='prefix where to create files')
-    parser.add_argument('-c', '--steam-command', default='steam', required=False, help='Steam command')
+    parser.add_argument('-c', '--steam-command', default='xdg-open', required=False, help='Steam command (defaults to xdg-open)')
     args = parser.parse_args()
     load_installed_apps(steam_root=args.steam_root, prefix=args.prefix, steam_cmd=args.steam_command)
