@@ -83,7 +83,7 @@ def load_installed_apps(steam_root, prefix=None, steam_cmd='xdg-open'):
         print(library_folders)
 
     if prefix is None:
-        prefix = os.path.join(os.environ.get('HOME'), '.local')
+        prefix = os.path.join(os.environ.get('HOME'), '.local', 'share')
 
     for library_folder in library_folders:
         for app_id in get_installed_apps(library_folder):
@@ -94,7 +94,7 @@ def load_installed_apps(steam_root, prefix=None, steam_cmd='xdg-open'):
             app_icon_name = f'steam_icon_{app_id}'
             if app_icons is not None:
                 for size, icon_src in app_icons.items():
-                    icon_dest_dir = os.path.join(prefix, 'share', 'icons', 'hicolor', f'{size}x{size}', 'apps')
+                    icon_dest_dir = os.path.join(prefix, 'icons', 'hicolor', f'{size}x{size}', 'apps')
                     icon_dest = os.path.join(icon_dest_dir, f'{app_icon_name}.png')
                     os.makedirs(icon_dest_dir, exist_ok=True)
                     shutil.copyfile(icon_src, icon_dest)
@@ -110,7 +110,7 @@ def load_installed_apps(steam_root, prefix=None, steam_cmd='xdg-open'):
                 'Icon': app_icon_name,
                 'Categories': 'Game;X-Steam;'
             }
-            with open(os.path.join(prefix, 'share', 'applications', app_desktop_file), 'w') as df:
+            with open(os.path.join(prefix, 'applications', app_desktop_file), 'w') as df:
                 app_desktop.write(df, space_around_delimiters=False)
 
 
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Create desktop entries for Steam games.')
     parser.add_argument('steam_root', help='path to Steam installation')
-    parser.add_argument('prefix', default=None, nargs='?', help='prefix where to create files')
+    parser.add_argument('prefix', default=None, nargs='?', help='Data dir where to create files (defaults to ~/.local/share)')
     parser.add_argument('-c', '--steam-command', default='xdg-open', required=False, help='Steam command (defaults to xdg-open)')
     args = parser.parse_args()
     load_installed_apps(steam_root=args.steam_root, prefix=args.prefix, steam_cmd=args.steam_command)
