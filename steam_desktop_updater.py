@@ -13,6 +13,9 @@ from tempfile import gettempdir
 
 
 def get_installed_apps(library_folder):
+    """
+    Enumerate IDs of installed apps in given library
+    """
     for app in glob.glob(os.path.join(library_folder, 'steamapps', 'appmanifest_*.acf')):
         with open(app, 'r') as amf:
             app_mainfest = acf.load(amf)
@@ -21,6 +24,9 @@ def get_installed_apps(library_folder):
 
 
 def extract_icons(steam_root, icon_hash, icon_path):
+    """
+    Extract zipped icons and convert ones in non-png format to png
+    """
     icons = {}
     tmpdir = os.path.join(gettempdir(), 'steam-icons')
     os.makedirs(tmpdir, exist_ok=True)
@@ -57,7 +63,8 @@ def extract_icons(steam_root, icon_hash, icon_path):
 
 def get_icons(steam_root, app_info):
     """
-    Returns icon store path in either format
+    Extracts icons from steam directory in either format
+    and return paths of extracted icons
     """
     common_info = app_info['sections'][b'appinfo'][b'common']
     icons_dir = os.path.join(steam_root, 'steam', 'games')
@@ -72,7 +79,7 @@ def get_icons(steam_root, app_info):
     return None
 
 
-def load_installed_apps(steam_root, prefix=None, steam_cmd='xdg-open'):
+def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
     with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
         appinfo_data = appinfo.load(af)
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
@@ -121,4 +128,4 @@ if __name__ == '__main__':
     parser.add_argument('prefix', default=None, nargs='?', help='Data dir where to create files (defaults to ~/.local/share)')
     parser.add_argument('-c', '--steam-command', default='xdg-open', required=False, help='Steam command (defaults to xdg-open)')
     args = parser.parse_args()
-    load_installed_apps(steam_root=args.steam_root, prefix=args.prefix, steam_cmd=args.steam_command)
+    create_desktop_data(steam_root=args.steam_root, prefix=args.prefix, steam_cmd=args.steam_command)
