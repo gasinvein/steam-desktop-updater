@@ -109,7 +109,7 @@ def create_desktop_data(steam_root, prefix=None, steam_cmd='xdg-open'):
                     os.makedirs(icon_dest_dir, exist_ok=True)
                     shutil.copyfile(icon_src, icon_dest)
 
-            app_desktop_file = f'steam_app_{app_id}_link.desktop'
+            app_desktop_file = f'steam_app_{app_id}.desktop'
             app_desktop = ConfigParser()
             app_desktop.optionxform = str
             app_desktop['Desktop Entry'] = {
