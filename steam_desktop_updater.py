@@ -23,6 +23,26 @@ def get_installed_apps(library_folder):
             yield app_mainfest['AppState']['appid']
 
 
+def extract_zipped_icons(tmpdir, icon_hash, icon_path):
+    icons = {}
+    with zipfile.ZipFile(icon_path, 'r') as zf:
+        for zi in zf.infolist():
+            if not zi.is_dir() and zi.filename.endswith('.png'):
+                with zf.open(zi.filename) as img_file:
+                    try:
+                        img = Image.open(img_file)
+                        h, w = img.size
+                        if h == w:
+                            dest = os.path.join(tmpdir, icon_hash)
+                            print('Extracting', zi.filename, file=sys.stderr)
+                            zf.extract(zi.filename, dest)
+                            icons[h] = os.path.join(dest, zi.filename)
+                        img.close()
+                    except OSError as e:
+                        print(zi.filename, ":", e, file=sys.stderr)
+    return icons
+
+
 def extract_icons(steam_root, icon_hash, icon_path):
     """
     Extract zipped icons and convert ones in non-png format to png
@@ -31,21 +51,8 @@ def extract_icons(steam_root, icon_hash, icon_path):
     tmpdir = os.path.join(gettempdir(), 'steam-icons')
     os.makedirs(tmpdir, exist_ok=True)
     if icon_path.endswith('.zip'):
-        with zipfile.ZipFile(icon_path, 'r') as zf:
-            for zi in zf.infolist():
-                if not zi.is_dir() and zi.filename.endswith('.png'):
-                    with zf.open(zi.filename) as img_file:
-                        try:
-                            img = Image.open(img_file)
-                            h, w = img.size
-                            if h == w:
-                                dest = os.path.join(tmpdir, icon_hash)
-                                print('Extracting', zi.filename, file=sys.stderr)
-                                zf.extract(zi.filename, dest)
-                                icons[h] = os.path.join(dest, zi.filename)
-                            img.close()
-                        except OSError as e:
-                            print(zi.filename, ":", e, file=sys.stderr)
+        zipped_icons = extract_zipped_icons(tmpdir=tmpdir, icon_hash=icon_hash, icon_path=icon_path)
+        icons.update(zipped_icons)
     elif icon_path.endswith('.ico'):
         try:
             with Image.open(icon_path) as img:
@@ -56,6 +63,11 @@ def extract_icons(steam_root, icon_hash, icon_path):
                     icons[h] = dest
         except OSError as e:
             print(os.path.relpath(icon_path, steam_root), ":", e, file=sys.stderr)
+            # Actually, an .ico file can be a zip archive
+            if zipfile.is_zipfile(icon_path):
+                print(os.path.relpath(icon_path, steam_root), 'appears to be a zip file')
+                zipped_icons = extract_zipped_icons(tmpdir=tmpdir, icon_hash=icon_hash, icon_path=icon_path)
+                icons.update(zipped_icons)
     else:
         raise ValueError('Don\'t know how to handle', icon_path)
     return icons
