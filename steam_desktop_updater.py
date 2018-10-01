@@ -11,6 +11,11 @@ from PIL import Image
 import io
 
 
+ICON_SIZES = {
+    'max': 512,
+}
+
+
 def get_installed_apps(library_folder):
     """
     Enumerate IDs of installed apps in given library
@@ -69,11 +74,21 @@ def save_icon(img_file, destdir, icon_name):
             print(e, file=sys.stderr)
         else:
             h, w = img.size
+            resized = False
             if h == w:
-                sized_destdir = os.path.join(destdir, 'icons', 'hicolor', f'{h}x{w}', 'apps')
+                s = h
+                # Resize icon if it's too large
+                m = ICON_SIZES['max']
+                if s > m:
+                    # TODO don't resize icon if we already have one with max size
+                    print('Icon size', f'{s}x{s}', 'is too large, resizing')
+                    img.resize((m, m), resample=Image.LANCZOS)
+                    s = m
+                    resized = True
+                sized_destdir = os.path.join(destdir, 'icons', 'hicolor', f'{s}x{s}', 'apps')
                 os.makedirs(sized_destdir, exist_ok=True)
                 dest = os.path.join(sized_destdir, f'{icon_name}.png')
-                if img.format == 'PNG':
+                if img.format == 'PNG' and not resized:
                     with open(dest, 'wb') as df:
                         img_bytes.seek(0)
                         df.write(img_bytes.read())
