@@ -31,15 +31,17 @@ def extract_zipped_icons(tmpdir, icon_hash, icon_path):
                 with zf.open(zi.filename) as img_file:
                     try:
                         img = Image.open(img_file)
+                    except OSError as e:
+                        print(zi.filename, ":", e, file=sys.stderr)
+                    else:
                         h, w = img.size
                         if h == w:
                             dest = os.path.join(tmpdir, icon_hash)
                             print('Extracting', zi.filename, file=sys.stderr)
                             zf.extract(zi.filename, dest)
                             icons[h] = os.path.join(dest, zi.filename)
+                    finally:
                         img.close()
-                    except OSError as e:
-                        print(zi.filename, ":", e, file=sys.stderr)
     return icons
 
 
