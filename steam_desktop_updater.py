@@ -36,9 +36,12 @@ class SteamIconStore(object):
             with zipfile.ZipFile(self._file, 'r') as zf:
                 for zi in zf.infolist():
                     if not zi.is_dir() and zi.filename.endswith('.png'):
-                        with zf.open(zi.filename) as img_file:
-                            print('Saving icon', zi.filename, file=sys.stderr)
-                            save_icon(img_file, destdir, icon_name)
+                        print('Saving icon', zi.filename, file=sys.stderr)
+                        # FIXME we create here a new bytes-like objects because ZipExtFile is not seekable
+                        with io.BytesIO() as img_bytes:
+                            with zf.open(zi.filename) as img_file:
+                                img_bytes.write(img_file.read())
+                            save_icon(img_bytes, destdir, icon_name)
         elif self._file.endswith('.ico'):
             print('Saving icon', self._file, file=sys.stderr)
             with open(self._file, 'rb') as img_file:
@@ -110,43 +113,45 @@ def save_icon(img_file, destdir, icon_name):
     """
     Save given bytes-like object to given directory with given name
     """
-    # FIXME we create here a new bytes-like objects because ZipExtFile is not seekable
-    with io.BytesIO() as img_bytes:
-        img_bytes.write(img_file.read())
-        try:
-            img = Image.open(img_bytes)
-        except OSError as e:
-            print(e, file=sys.stderr)
-        else:
-            h, w = img.size
-            resized = False
-            if h == w:
-                s = h
-                # Resize icon if it's too large
-                m = ICON_SIZES['max']
-                if s > m:
-                    # TODO don't resize icon if we already have one with max size
-                    print('Icon size', f'{s}x{s}', 'is too large, resizing')
-                    img.resize((m, m), resample=Image.LANCZOS)
-                    s = m
-                    resized = True
-                sized_destdir = os.path.join(destdir, 'icons', 'hicolor', f'{s}x{s}', 'apps')
-                os.makedirs(sized_destdir, exist_ok=True)
-                dest = os.path.join(sized_destdir, f'{icon_name}.png')
-                if img.format == 'PNG' and not resized:
-                    with open(dest, 'wb') as df:
-                        img_bytes.seek(0)
-                        df.write(img_bytes.read())
-                else:
-                    img.save(dest)
-                img.close()
-                return(dest)
+    try:
+        img = Image.open(img_file)
+    except OSError as e:
+        print(e, file=sys.stderr)
+    else:
+        h, w = img.size
+        save_direct = True
+        if h == w:
+            s = h
+            # Resize icon if it's too large
+            m = ICON_SIZES['max']
+            max_size_dest = os.path.join(destdir, 'icons', 'hicolor', f'{m}x{m}', 'apps', f'{icon_name}.png')
+            if s > m:
+                if os.path.isfile(max_size_dest):
+                    return
+                print('Icon size', f'{s}x{s}', 'is too large, resizing')
+                img.resize((m, m), resample=Image.LANCZOS)
+                s = m
+                save_direct = False
+            if img.format != 'PNG':
+                save_direct = False
+            dest = os.path.join(destdir, 'icons', 'hicolor', f'{s}x{s}', 'apps', f'{icon_name}.png')
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            if save_direct:
+                with open(dest, 'wb') as df:
+                    img_file.seek(0)
+                    df.write(img_file.read())
+            else:
+                img.save(dest)
+            img.close()
+            return(dest)
 
 
 def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
+    print('Loading appinfo.vdf', file=sys.stderr)
     with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
         appinfo_data = appinfo.load(af)
 
+    print('Searching library folders', file=sys.stderr)
     library_folders = []
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
         for k, v in acf.load(lf)['LibraryFolders'].items():
