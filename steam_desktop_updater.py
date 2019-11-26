@@ -119,7 +119,9 @@ def save_icon(img_file, destdir, icon_name):
                 if os.path.isfile(max_size_dest):
                     return
                 print('Icon size', f'{s}x{s}', 'is too large, resizing')
-                img.resize((m, m), resample=Image.LANCZOS)
+                new_img = img.resize((m, m), resample=Image.LANCZOS)
+                img.close()
+                img = new_img
                 s = m
                 save_direct = False
             if img.format != 'PNG':
