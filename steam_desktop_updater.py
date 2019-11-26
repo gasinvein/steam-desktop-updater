@@ -15,38 +15,6 @@ ICON_SIZES = {
 }
 DEFAULT_STEAM_CMD = 'xdg-open'
 
-def get_installed_apps(library_folder):
-    """
-    Enumerate IDs of installed apps in given library
-    """
-    for app in glob.glob(os.path.join(library_folder, 'steamapps', 'appmanifest_*.acf')):
-        with open(app, 'r') as amf:
-            app_mainfest = acf.load(amf)
-            # TODO maybe check if game is actually installed?
-            yield app_mainfest['AppState']['appid']
-
-
-class SteamIconStore(object):
-    def __init__(self, icon_file):
-        self._file = icon_file
-
-    def extract_icons(self, destdir, icon_name):
-        if zipfile.is_zipfile(self._file):
-            print(os.path.basename(self._file), 'appears to be a zip file', file=sys.stderr)
-            with zipfile.ZipFile(self._file, 'r') as zf:
-                for zi in zf.infolist():
-                    if not zi.is_dir() and zi.filename.endswith('.png'):
-                        print('Saving icon', zi.filename, file=sys.stderr)
-                        # FIXME we create here a new bytes-like objects because ZipExtFile is not seekable
-                        with io.BytesIO() as img_bytes:
-                            with zf.open(zi.filename) as img_file:
-                                img_bytes.write(img_file.read())
-                            save_icon(img_bytes, destdir, icon_name)
-        elif self._file.endswith('.ico'):
-            print('Saving icon', self._file, file=sys.stderr)
-            with open(self._file, 'rb') as img_file:
-                save_icon(img_file, destdir, icon_name)
-
 
 class SteamApp(object):
     def __init__(self, steam_root, app_id, app_info=None):
@@ -109,6 +77,28 @@ class SteamApp(object):
             icon_store.extract_icons(destdir=destdir, icon_name=self.icon_name)
 
 
+class SteamIconStore(object):
+    def __init__(self, icon_file):
+        self._file = icon_file
+
+    def extract_icons(self, destdir, icon_name):
+        if zipfile.is_zipfile(self._file):
+            print(os.path.basename(self._file), 'appears to be a zip file', file=sys.stderr)
+            with zipfile.ZipFile(self._file, 'r') as zf:
+                for zi in zf.infolist():
+                    if not zi.is_dir() and zi.filename.endswith('.png'):
+                        print('Saving icon', zi.filename, file=sys.stderr)
+                        # FIXME we create here a new bytes-like objects because ZipExtFile is not seekable
+                        with io.BytesIO() as img_bytes:
+                            with zf.open(zi.filename) as img_file:
+                                img_bytes.write(img_file.read())
+                            save_icon(img_bytes, destdir, icon_name)
+        elif self._file.endswith('.ico'):
+            print('Saving icon', self._file, file=sys.stderr)
+            with open(self._file, 'rb') as img_file:
+                save_icon(img_file, destdir, icon_name)
+
+
 def save_icon(img_file, destdir, icon_name):
     """
     Save given bytes-like object to given directory with given name
@@ -144,6 +134,16 @@ def save_icon(img_file, destdir, icon_name):
                 img.save(dest)
             img.close()
             return(dest)
+
+def get_installed_apps(library_folder):
+    """
+    Enumerate IDs of installed apps in given library
+    """
+    for app in glob.glob(os.path.join(library_folder, 'steamapps', 'appmanifest_*.acf')):
+        with open(app, 'r') as amf:
+            app_mainfest = acf.load(amf)
+            # TODO maybe check if game is actually installed?
+            yield app_mainfest['AppState']['appid']
 
 
 def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
