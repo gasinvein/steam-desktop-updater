@@ -29,6 +29,10 @@ class SteamApp(object):
         self.desktop_name = f'steam_app_{app_id}'
         self.icon_name = f'steam_icon_{app_id}'
 
+    def is_game(self):
+        #FIXME dumb way to skip non-game apps
+        return b'common' in self.app_info['sections'][b'appinfo']
+
     def get_name(self):
         return self.app_info['sections'][b'appinfo'][b'common'][b'name'].decode()
 
@@ -167,6 +171,8 @@ def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
         print('Processing library', library_folder, file=sys.stderr)
         for app_id in get_installed_apps(library_folder):
             app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[int(app_id)])
+            if not app.is_game():
+                continue
             print('Processing app ID', app_id, ':', app.get_name(), file=sys.stderr)
             app.save_desktop_entry(destdir)
             app.extract_icons(destdir)
