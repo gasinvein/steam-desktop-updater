@@ -163,15 +163,22 @@ class SteamIconExtractor(object):
         return(dest)
 
 
-def get_installed_apps(library_folder):
+def get_installed_apps(steam_root):
     """
     Enumerate IDs of installed apps in given library
     """
-    for app in glob.glob(os.path.join(library_folder, 'steamapps', 'appmanifest_*.acf')):
-        with open(app, 'r') as amf:
-            app_mainfest = vdf.load(amf)
-            # TODO maybe check if game is actually installed?
-            yield app_mainfest['AppState']['appid']
+    apps = []
+    logging.info('Searching library folders')
+    with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
+        for k, v in vdf.load(lf)['LibraryFolders'].items():
+            if not k.isdigit():
+                continue
+            logging.info(f'Collecting apps in folder {v}')
+            for app in glob.glob(os.path.join(v, 'steamapps', 'appmanifest_*.acf')):
+                with open(app, 'r') as amf:
+                    app_mainfest = vdf.load(amf)
+                    apps.append((v, int(app_mainfest['AppState']['appid'])))
+    return apps
 
 
 def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
@@ -182,27 +189,18 @@ def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
         for app in apps_gen:
             appinfo_data[app['appid']] = app['data']['appinfo']
 
-    logging.info('Searching library folders')
-    library_folders = []
-    with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
-        for k, v in vdf.load(lf)['LibraryFolders'].items():
-            if k.isdigit():
-                library_folders.append(v)
-
     if destdir is None:
         destdir = os.path.join(os.environ.get('HOME'), '.local', 'share')
 
-    for library_folder in library_folders:
-        logging.info(f'Processing library {library_folder}')
-        for app_id in get_installed_apps(library_folder):
-            app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[int(app_id)])
-            if not app.is_game():
-                continue
-            if not app.is_installed(library_folder):
-                continue
-            logging.info(f'Processing app ID {app_id} : {app.get_name()}')
-            app.save_desktop_entry(destdir)
-            app.extract_icons(destdir)
+    for library_folder, app_id in get_installed_apps(steam_root):
+        app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[app_id])
+        if not app.is_game():
+            continue
+        if not app.is_installed(library_folder):
+            continue
+        logging.info(f'Processing app ID {app_id} : {app.get_name()}')
+        app.save_desktop_entry(destdir)
+        app.extract_icons(destdir)
 
 
 if __name__ == '__main__':
