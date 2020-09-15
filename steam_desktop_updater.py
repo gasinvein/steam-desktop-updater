@@ -32,6 +32,21 @@ class SteamApp(object):
                 return True
         return False
 
+    def is_installed(self, library_folder):
+        app_dir = os.path.join(library_folder, 'steamapps', 'common',
+                               self.app_info['config']['installdir'])
+        if os.path.isdir(app_dir):
+            for i, launch in self.app_info['config']['launch'].items():
+                assert i.isdigit()
+                bin_path = launch['executable']
+                if 'config' in launch:
+                    if 'windows' in launch['config']['oslist']:
+                        bin_path = bin_path.replace('\\', '/')
+                bin_path_abs = os.path.join(app_dir, bin_path)
+                if os.path.isfile(bin_path_abs):
+                    return True
+        return False
+
     def get_name(self):
         return self.app_info['common']['name']
 
@@ -182,6 +197,8 @@ def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
         for app_id in get_installed_apps(library_folder):
             app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[int(app_id)])
             if not app.is_game():
+                continue
+            if not app.is_installed(library_folder):
                 continue
             logging.info(f'Processing app ID {app_id} : {app.get_name()}')
             app.save_desktop_entry(destdir)
