@@ -89,11 +89,8 @@ class SteamIconStore(object):
                 for zi in zf.infolist():
                     if not zi.is_dir() and zi.filename.endswith('.png'):
                         logging.info(f'Saving icon {zi.filename}')
-                        # FIXME we create here a new bytes-like objects because ZipExtFile is not seekable
-                        with io.BytesIO() as img_bytes:
-                            with zf.open(zi.filename) as img_file:
-                                img_bytes.write(img_file.read())
-                            save_icon(img_bytes, destdir, icon_name)
+                        with zf.open(zi.filename) as img_file:
+                            save_icon(img_file, destdir, icon_name)
         elif self._file.endswith('.ico'):
             logging.info(f'Saving icon {self._file}')
             with open(self._file, 'rb') as img_file:
