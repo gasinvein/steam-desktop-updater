@@ -77,18 +77,17 @@ class SteamApp(object):
         """
         Get name of the file containing icon(s)
         """
-        icon_files = []
+        icon_files = {}
         common_info = self.app_info['common']
         icons_dir = os.path.join(self.steam_root, 'steam', 'games')
-        for i in ['linuxclienticon', 'clienticon', 'clienticns', 'clienttga', 'icon', 'logo', 'logo_small']:
+        for i, e in [('linuxclienticon', 'zip'), ('clienticon', 'ico')]:
             if i in common_info:
                 icon_hash = common_info[i]
                 logging.debug(f'{i} is set, searching it... ')
-                for fmt in ['zip', 'ico']:
-                    icon_path = os.path.join(icons_dir, f'{icon_hash}.{fmt}')
-                    if os.path.isfile(icon_path):
-                        logging.debug(f'found {icon_path}')
-                        icon_files.append(icon_path)
+                icon_path = os.path.join(icons_dir, f'{icon_hash}.{e}')
+                if os.path.isfile(icon_path):
+                    logging.debug(f'found {icon_path}')
+                    icon_files[i] = icon_path
         return icon_files
 
     def extract_icons(self, destdir):
@@ -96,9 +95,11 @@ class SteamApp(object):
         if not icon_files:
             logging.warning(f'No icons found')
             return
-        for icon_file in icon_files:
-            extractor = SteamIconExtractor(icon_file, destdir, self.icon_name)
-            extractor.extract_icons()
+        for pref in ['linuxclienticon', 'clienticon']:
+            if pref in icon_files:
+                extractor = SteamIconExtractor(icon_files[pref], destdir, self.icon_name)
+                extractor.extract_icons()
+                return
 
 
 class SteamIconExtractor(object):
