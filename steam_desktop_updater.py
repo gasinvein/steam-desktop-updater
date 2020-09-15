@@ -7,7 +7,8 @@ import glob
 import zipfile
 from configparser import ConfigParser
 from PIL import Image
-from steamfiles import appinfo, acf
+import vdf
+from steam.utils import appcache
 
 
 ICON_SIZES = {
@@ -17,24 +18,19 @@ DEFAULT_STEAM_CMD = 'xdg-open'
 
 
 class SteamApp(object):
-    def __init__(self, steam_root, app_id, app_info=None):
+    def __init__(self, steam_root, app_id, app_info):
         self.app_id = app_id
-        if app_info is None:
-            with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
-                steam_appinfo = appinfo.load(af)
-                self.app_info = steam_appinfo[int(app_id)]
-        else:
-            self.app_info = app_info
+        self.app_info = app_info
         self.steam_root = steam_root
         self.desktop_name = f'steam_app_{app_id}'
         self.icon_name = f'steam_icon_{app_id}'
 
     def is_game(self):
         #FIXME dumb way to skip non-game apps
-        return b'common' in self.app_info['sections'][b'appinfo']
+        return 'common' in self.app_info
 
     def get_name(self):
-        return self.app_info['sections'][b'appinfo'][b'common'][b'name'].decode()
+        return self.app_info['common']['name']
 
     def get_desktop_entry(self, steam_cmd=DEFAULT_STEAM_CMD):
         app_name = self.get_name()
@@ -63,11 +59,11 @@ class SteamApp(object):
         """
         Get name of the file containing icon(s)
         """
-        common_info = self.app_info['sections'][b'appinfo'][b'common']
+        common_info = self.app_info['common']
         icons_dir = os.path.join(self.steam_root, 'steam', 'games')
-        for i in [b'linuxclienticon', b'clienticon', b'clienticns', b'clienttga', b'icon', b'logo', b'logo_small']:
+        for i in ['linuxclienticon', 'clienticon', 'clienticns', 'clienttga', 'icon', 'logo', 'logo_small']:
             if i in common_info:
-                icon_hash = common_info[i].decode()
+                icon_hash = common_info[i]
                 print(i, 'is set, searching it... ', end='', file=sys.stderr)
                 for fmt in ['zip', 'ico']:
                     icon_path = os.path.join(icons_dir, f'{icon_hash}.{fmt}')
@@ -147,20 +143,23 @@ def get_installed_apps(library_folder):
     """
     for app in glob.glob(os.path.join(library_folder, 'steamapps', 'appmanifest_*.acf')):
         with open(app, 'r') as amf:
-            app_mainfest = acf.load(amf)
+            app_mainfest = vdf.load(amf)
             # TODO maybe check if game is actually installed?
             yield app_mainfest['AppState']['appid']
 
 
 def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
     print('Loading appinfo.vdf', file=sys.stderr)
+    appinfo_data = {}
     with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
-        appinfo_data = appinfo.load(af)
+        _, apps_gen = appcache.parse_appinfo(af)
+        for app in apps_gen:
+            appinfo_data[app['appid']] = app['data']['appinfo']
 
     print('Searching library folders', file=sys.stderr)
     library_folders = []
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
-        for k, v in acf.load(lf)['LibraryFolders'].items():
+        for k, v in vdf.load(lf)['LibraryFolders'].items():
             if k.isdigit():
                 library_folders.append(v)
 
