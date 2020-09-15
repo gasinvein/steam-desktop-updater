@@ -56,10 +56,11 @@ class SteamApp(object):
         with open(os.path.join(apps_destdir, app_desktop_file), 'w') as df:
             app_desktop.write(df, space_around_delimiters=False)
 
-    def get_icon_extractor(self, datadir, icon_name):
+    def get_icon_files(self):
         """
         Get name of the file containing icon(s)
         """
+        icon_files = []
         common_info = self.app_info['common']
         icons_dir = os.path.join(self.steam_root, 'steam', 'games')
         for i in ['linuxclienticon', 'clienticon', 'clienticns', 'clienttga', 'icon', 'logo', 'logo_small']:
@@ -70,14 +71,17 @@ class SteamApp(object):
                     icon_path = os.path.join(icons_dir, f'{icon_hash}.{fmt}')
                     if os.path.isfile(icon_path):
                         logging.debug(f'found {icon_path}')
-                        return SteamIconExtractor(icon_path, datadir, icon_name)
+                        icon_files.append(icon_path)
+        return icon_files
 
     def extract_icons(self, destdir):
-        icon_store = self.get_icon_extractor(datadir=destdir, icon_name=self.icon_name)
-        if icon_store is not None:
-            icon_store.extract_icons()
-        else:
+        icon_files = self.get_icon_files()
+        if not icon_files:
             logging.warning(f'No icons found')
+            return
+        for icon_file in icon_files:
+            extractor = SteamIconExtractor(icon_file, destdir, self.icon_name)
+            extractor.extract_icons()
 
 
 class SteamIconExtractor(object):
@@ -87,16 +91,17 @@ class SteamIconExtractor(object):
         self.icon_name = icon_name
 
     def extract_icons(self):
+        logging.info(f'Extracting icon(s) from {self._file}')
         if zipfile.is_zipfile(self._file):
-            logging.info(f'{self._file} appears to be a zip file')
+            logging.debug(f'{self._file} appears to be a zip file')
             with zipfile.ZipFile(self._file, 'r') as zf:
                 for zi in zf.infolist():
                     if not zi.is_dir() and zi.filename.endswith('.png'):
-                        logging.info(f'Saving icon {zi.filename}')
+                        logging.debug(f'Saving icon {zi.filename}')
                         with zf.open(zi.filename) as img_file:
                             self.save_icon(img_file)
         elif self._file.endswith('.ico'):
-            logging.info(f'Saving icon {self._file}')
+            logging.debug(f'Saving icon {self._file}')
             with open(self._file, 'rb') as img_file:
                 self.save_icon(img_file)
 
