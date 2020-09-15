@@ -27,8 +27,10 @@ class SteamApp(object):
         self.icon_name = f'steam_icon_{app_id}'
 
     def is_game(self):
-        #FIXME dumb way to skip non-game apps
-        return 'common' in self.app_info
+        if 'common' in self.app_info:
+            if self.app_info['common']['type'].lower() == 'game':
+                return True
+        return False
 
     def get_name(self):
         return self.app_info['common']['name']
