@@ -6,6 +6,7 @@ import io
 import glob
 import zipfile
 from configparser import ConfigParser
+import logging
 from PIL import Image
 import vdf
 from steam.utils import appcache
@@ -64,11 +65,11 @@ class SteamApp(object):
         for i in ['linuxclienticon', 'clienticon', 'clienticns', 'clienttga', 'icon', 'logo', 'logo_small']:
             if i in common_info:
                 icon_hash = common_info[i]
-                print(i, 'is set, searching it... ', end='', file=sys.stderr)
+                logging.debug(f'{i} is set, searching it... ')
                 for fmt in ['zip', 'ico']:
                     icon_path = os.path.join(icons_dir, f'{icon_hash}.{fmt}')
                     if os.path.isfile(icon_path):
-                        print('found', os.path.relpath(icon_path, self.steam_root), file=sys.stderr)
+                        logging.debug(f'found {icon_path}')
                         return SteamIconStore(icon_path)
 
     def extract_icons(self, destdir):
@@ -83,18 +84,18 @@ class SteamIconStore(object):
 
     def extract_icons(self, destdir, icon_name):
         if zipfile.is_zipfile(self._file):
-            print(os.path.basename(self._file), 'appears to be a zip file', file=sys.stderr)
+            logging.info(f'{self._file} appears to be a zip file')
             with zipfile.ZipFile(self._file, 'r') as zf:
                 for zi in zf.infolist():
                     if not zi.is_dir() and zi.filename.endswith('.png'):
-                        print('Saving icon', zi.filename, file=sys.stderr)
+                        logging.info(f'Saving icon {zi.filename}')
                         # FIXME we create here a new bytes-like objects because ZipExtFile is not seekable
                         with io.BytesIO() as img_bytes:
                             with zf.open(zi.filename) as img_file:
                                 img_bytes.write(img_file.read())
                             save_icon(img_bytes, destdir, icon_name)
         elif self._file.endswith('.ico'):
-            print('Saving icon', self._file, file=sys.stderr)
+            logging.info(f'Saving icon {self._file}')
             with open(self._file, 'rb') as img_file:
                 save_icon(img_file, destdir, icon_name)
 
@@ -106,7 +107,7 @@ def save_icon(img_file, destdir, icon_name):
     try:
         img = Image.open(img_file)
     except OSError as e:
-        print(e, file=sys.stderr)
+        logging.info(e)
     else:
         h, w = img.size
         save_direct = True
@@ -118,7 +119,7 @@ def save_icon(img_file, destdir, icon_name):
             if s > m:
                 if os.path.isfile(max_size_dest):
                     return
-                print('Icon size', f'{s}x{s}', 'is too large, resizing')
+                logging.info(f'Icon size {s}x{s} is too large, resizing')
                 new_img = img.resize((m, m), resample=Image.LANCZOS)
                 img.close()
                 img = new_img
@@ -149,14 +150,14 @@ def get_installed_apps(library_folder):
 
 
 def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
-    print('Loading appinfo.vdf', file=sys.stderr)
+    logging.info('Loading appinfo.vdf')
     appinfo_data = {}
     with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
         _, apps_gen = appcache.parse_appinfo(af)
         for app in apps_gen:
             appinfo_data[app['appid']] = app['data']['appinfo']
 
-    print('Searching library folders', file=sys.stderr)
+    logging.info('Searching library folders')
     library_folders = []
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
         for k, v in vdf.load(lf)['LibraryFolders'].items():
@@ -167,12 +168,12 @@ def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
         destdir = os.path.join(os.environ.get('HOME'), '.local', 'share')
 
     for library_folder in library_folders:
-        print('Processing library', library_folder, file=sys.stderr)
+        logging.info(f'Processing library {library_folder}')
         for app_id in get_installed_apps(library_folder):
             app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[int(app_id)])
             if not app.is_game():
                 continue
-            print('Processing app ID', app_id, ':', app.get_name(), file=sys.stderr)
+            logging.info(f'Processing app ID {app_id} : {app.get_name()}')
             app.save_desktop_entry(destdir)
             app.extract_icons(destdir)
 
@@ -184,4 +185,5 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--datatir', default=None, required=False, help='Destination data dir where to create files (defaults to ~/.local/share)')
     parser.add_argument('-c', '--steam-command', default='xdg-open', required=False, help='Steam command (defaults to xdg-open)')
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO)
     create_desktop_data(steam_root=args.steam_root, destdir=args.datatir, steam_cmd=args.steam_command)
