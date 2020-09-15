@@ -98,7 +98,7 @@ class SteamApp(object):
         for pref in ['linuxclienticon', 'clienticon']:
             if pref in icon_files:
                 extractor = SteamIconExtractor(icon_files[pref], destdir, self.icon_name)
-                extractor.extract_icons()
+                extractor.extract()
                 return
 
 
@@ -108,60 +108,52 @@ class SteamIconExtractor(object):
         self.datadir = datadir
         self.icon_name = icon_name
 
-    def extract_icons(self):
+    def get_dest(self, size):
+        destdir = os.path.join(self.datadir, 'icons', 'hicolor', f'{size}x{size}', 'apps')
+        if not os.path.isdir(destdir):
+            os.makedirs(destdir)
+        return os.path.join(destdir, f'{self.icon_name}.png')
+
+    def extract_zip_png(self):
+        with zipfile.ZipFile(self._file, 'r') as zf:
+            for zi in zf.infolist():
+                if zi.is_dir() or not zi.filename.lower().endswith('.png'):
+                    continue
+                logging.debug(f'Saving icon {zi.filename}')
+                with zf.open(zi.filename) as img_file:
+                    try:
+                        img = Image.open(img_file)
+                    except OSError as e:
+                        logging.info(e)
+                        continue
+                    h, w = img.size
+                    assert h == w
+                    assert img.format == 'PNG'
+                    img_file.seek(0)
+                    with open(self.get_dest(h), 'wb') as d:
+                        d.write(img_file.read())
+                    img.close()
+
+    def extract_ico(self):
+        with Image.open(self._file) as img:
+            assert img.format == 'ICO'
+            for size in img.ico.sizes():
+                subimg = img.ico.getimage(size)
+                h, w = subimg.size
+                assert h == w
+                if subimg.size != size:
+                    logging.warning(f'Expected size {size[0]}x{size[1]}, got {h}x{w}')
+                logging.debug(f'Saving icon size {h}x{w}')
+                subimg.save(self.get_dest(h), format='PNG')
+
+    def extract(self):
         logging.info(f'Extracting icon(s) from {self._file}')
         if zipfile.is_zipfile(self._file):
             logging.debug(f'{self._file} appears to be a zip file')
-            with zipfile.ZipFile(self._file, 'r') as zf:
-                for zi in zf.infolist():
-                    if not zi.is_dir() and zi.filename.endswith('.png'):
-                        logging.debug(f'Saving icon {zi.filename}')
-                        with zf.open(zi.filename) as img_file:
-                            self.save_icon(img_file)
+            self.extract_zip_png()
         elif self._file.endswith('.ico'):
             logging.debug(f'Saving icon {self._file}')
-            with open(self._file, 'rb') as img_file:
-                self.save_icon(img_file)
-
-    def save_icon(self, img_file):
-        """
-        Save given bytes-like object to given directory with given name
-        """
-        try:
-            img = Image.open(img_file)
-        except OSError as e:
-            logging.info(e)
-            return
-        h, w = img.size
-        save_direct = True
-        if h != w:
-            return
-        s = h
-        # Resize icon if it's too large
-        m = ICON_SIZES['max']
-        max_size_dest = os.path.join(self.datadir, 'icons', 'hicolor', f'{m}x{m}', 'apps',
-                                     f'{self.icon_name}.png')
-        if s > m:
-            if os.path.isfile(max_size_dest):
-                return
-            logging.info(f'Icon size {s}x{s} is too large, resizing')
-            new_img = img.resize((m, m), resample=Image.LANCZOS)
-            img.close()
-            img = new_img
-            s = m
-            save_direct = False
-        if img.format != 'PNG':
-            save_direct = False
-        dest = os.path.join(self.datadir, 'icons', 'hicolor', f'{s}x{s}', 'apps', f'{self.icon_name}.png')
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        if save_direct:
-            with open(dest, 'wb') as df:
-                img_file.seek(0)
-                df.write(img_file.read())
-        else:
-            img.save(dest)
-        img.close()
-        return(dest)
+            self.extract_ico()
 
 
 def get_installed_apps(steam_root):
