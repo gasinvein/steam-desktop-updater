@@ -164,6 +164,7 @@ def get_installed_apps(steam_root):
     logging.info('Searching library folders')
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
         library_folders = vdf.load(lf)['LibraryFolders']
+        assert '0' not in library_folders
         library_folders['0'] = steam_root
         for k, v in library_folders.items():
             if not k.isdigit():
