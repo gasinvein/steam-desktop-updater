@@ -167,9 +167,8 @@ def get_installed_apps(steam_root):
     apps = []
     logging.info('Searching library folders')
     with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
-        for k, v in [("0", steam_root)] + list(vdf.load(lf)['LibraryFolders'].items()):
-            if not k.isdigit():
-                continue
+        library_folders = vdf.load(lf)['LibraryFolders']
+        for v in [steam_root] + [v for k, v in library_folders.items() if k.isdigit()]:
             logging.info(f'Collecting apps in folder {v}')
             for app in glob.glob(os.path.join(v, 'steamapps', 'appmanifest_*.acf')):
                 with open(app, 'r') as amf:
