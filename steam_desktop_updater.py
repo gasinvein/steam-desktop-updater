@@ -39,9 +39,13 @@ class SteamApp(object):
             for i, launch in self.app_info['config']['launch'].items():
                 assert i.isdigit()
                 bin_path = launch['executable']
-                if 'config' in launch:
-                    if 'windows' in launch['config']['oslist']:
-                        bin_path = bin_path.replace('\\', '/')
+                try:
+                    oslist = launch['config']['oslist']
+                except KeyError:
+                    # Assume it's windows-only game
+                    oslist = ['windows']
+                if 'windows' in oslist:
+                    bin_path = bin_path.replace('\\', '/')
                 bin_path_abs = os.path.join(app_dir, bin_path)
                 if os.path.isfile(bin_path_abs):
                     return True
