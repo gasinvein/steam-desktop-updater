@@ -9,6 +9,7 @@ from configparser import ConfigParser
 import logging
 from PIL import Image
 import vdf
+from pydicti import dicti
 from steam.utils import appcache
 
 
@@ -175,8 +176,9 @@ def get_installed_apps(steam_root):
                 continue
             logging.info(f'Collecting apps in folder {v}')
             for app in glob.glob(os.path.join(v, 'steamapps', 'appmanifest_*.acf')):
+                logging.debug(f'Reading {app}')
                 with open(app, 'r') as amf:
-                    app_mainfest = vdf.load(amf)
+                    app_mainfest = vdf.load(amf, mapper=dicti)
                     apps.append((v, int(app_mainfest['AppState']['appid'])))
     return apps
 
