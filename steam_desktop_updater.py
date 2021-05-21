@@ -173,7 +173,8 @@ def get_installed_apps(steam_root):
             for app in glob.glob(os.path.join(folder_path, 'steamapps', 'appmanifest_*.acf')):
                 with open(app, 'r') as amf:
                     app_mainfest = vdf.load(amf)
-                    apps.append((folder_path, int(app_mainfest['AppState']['appid'])))
+                    app_state = {k.lower(): v for k, v in app_mainfest['AppState'].items()}
+                    apps.append((folder_path, int(app_state['appid'])))
     return apps
 
 
