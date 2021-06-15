@@ -18,6 +18,11 @@ ICON_SIZES = {
 DEFAULT_STEAM_CMD = 'xdg-open'
 
 
+class DesktopFileParser(ConfigParser):
+    def optionxform(self, option):
+        return option
+
+
 class SteamApp(object):
     def __init__(self, steam_root, app_id, app_info):
         self.app_id = app_id
@@ -68,8 +73,7 @@ class SteamApp(object):
         }
 
     def save_desktop_entry(self, destdir, steam_cmd=DEFAULT_STEAM_CMD):
-        app_desktop = ConfigParser()
-        app_desktop.optionxform = str
+        app_desktop = DesktopFileParser()
         app_desktop.read_dict(self.get_desktop_entry())
         apps_destdir = os.path.join(destdir, 'applications')
         app_desktop_file = f'{self.desktop_name}.desktop'
