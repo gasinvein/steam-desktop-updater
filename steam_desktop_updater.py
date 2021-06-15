@@ -105,7 +105,8 @@ class SteamApp(object):
     def extract_icons(self, destdir: Path):
         for icon_file in self.get_icon_files():
             logging.info(f'Extracting icon(s) from {icon_file.path}')
-            icon_file.extract(destdir)
+            with icon_file:
+                icon_file.extract(destdir)
             return 
         else:
             logging.warning(f'No icons found')
@@ -115,6 +116,13 @@ class SteamIconContainer(object):
     def __init__(self, icon_file: Path, icon_name: str):
         self.path = icon_file
         self.icon_name = icon_name
+        self.file = None
+
+    def __enter__(self):
+        raise NotImplementedError
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.file.close()
 
     def get_dest(self, size: int, datadir: Path):
         destdir = datadir / 'icons' / 'hicolor' / f'{size}x{size}' / 'apps'
@@ -127,39 +135,47 @@ class SteamIconContainer(object):
 
 
 class SteamIconZip(SteamIconContainer):
+    def __enter__(self):
+        self.file = zipfile.ZipFile(self.path, 'r')
+        return self
+
     def extract(self, datadir: Path):
-        with zipfile.ZipFile(self.path, 'r') as zf:
-            for zi in zf.infolist():
-                if zi.is_dir() or not zi.filename.lower().endswith('.png'):
+        assert isinstance(self.file, zipfile.ZipFile)
+        for zi in self.file.infolist():
+            if zi.is_dir() or not zi.filename.lower().endswith('.png'):
+                continue
+            logging.debug(f'Saving icon {zi.filename}')
+            with self.file.open(zi.filename) as img_file:
+                try:
+                    img = Image.open(img_file)
+                except OSError as e:
+                    logging.warning(f'{self.path.name}: {e}')
                     continue
-                logging.debug(f'Saving icon {zi.filename}')
-                with zf.open(zi.filename) as img_file:
-                    try:
-                        img = Image.open(img_file)
-                    except OSError as e:
-                        logging.info(e)
-                        continue
-                    h, w = img.size
-                    assert h == w
-                    assert img.format == 'PNG'
-                    img_file.seek(0)
-                    with open(self.get_dest(h, datadir), 'wb') as d:
-                        d.write(img_file.read())
-                    img.close()
+                h, w = img.size
+                assert h == w
+                assert img.format == 'PNG'
+                img_file.seek(0)
+                with open(self.get_dest(h, datadir), 'wb') as d:
+                    d.write(img_file.read())
+                img.close()
 
 
 class SteamIconICO(SteamIconContainer):
+    def __enter__(self):
+        self.file = Image.open(self.path)
+        return self
+
     def extract(self, datadir: Path):
-        with Image.open(self.path) as img:
-            assert img.format == 'ICO'
-            for size in img.ico.sizes():
-                subimg = img.ico.getimage(size)
-                h, w = subimg.size
-                assert h == w
-                if subimg.size != size:
-                    logging.warning(f'Expected size {size[0]}x{size[1]}, got {h}x{w}')
-                logging.debug(f'Saving icon size {h}x{w}')
-                subimg.save(self.get_dest(h, datadir), format='PNG')
+        assert isinstance(self.file, Image.Image)
+        assert self.file.format == 'ICO'
+        for size in self.file.ico.sizes():
+            subimg = self.file.ico.getimage(size)
+            h, w = subimg.size
+            assert h == w
+            if subimg.size != size:
+                logging.warning(f'Expected size {size[0]}x{size[1]}, got {h}x{w}')
+            logging.debug(f'Saving icon size {h}x{w}')
+            subimg.save(self.get_dest(h, datadir), format='PNG')
 
 
 def get_installed_apps(steam_root: Path):
