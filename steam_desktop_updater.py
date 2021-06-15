@@ -86,45 +86,49 @@ class SteamApp(object):
         """
         Get name of the file containing icon(s)
         """
-        icon_files = {}
+        icon_containers = []
         common_info = self.app_info['common']
         icons_dir = self.steam_root / 'steam' / 'games'
-        for i, e in [('linuxclienticon', 'zip'), ('clienticon', 'ico')]:
-            if i in common_info:
-                icon_hash = common_info[i]
-                logging.debug(f'{i} is set, searching it... ')
-                icon_path = icons_dir / f'{icon_hash}.{e}'
+        for icon_kind, icon_ext, container in [
+                ('linuxclienticon', 'zip', SteamIconZip),
+                ('clienticon', 'ico', SteamIconICO)
+            ]:
+            if icon_kind in common_info:
+                icon_hash = common_info[icon_kind]
+                logging.debug(f'{icon_kind} is set, searching it... ')
+                icon_path = icons_dir / f'{icon_hash}.{icon_ext}'
                 if icon_path.is_file():
                     logging.debug(f'found {icon_path}')
-                    icon_files[i] = icon_path
-        return icon_files
+                    icon_containers.append(container(icon_path, self.icon_name))
+        return icon_containers
 
-    def extract_icons(self, destdir):
-        icon_files = self.get_icon_files()
-        if not icon_files:
+    def extract_icons(self, destdir: Path):
+        for icon_file in self.get_icon_files():
+            logging.info(f'Extracting icon(s) from {icon_file.path}')
+            icon_file.extract(destdir)
+            return 
+        else:
             logging.warning(f'No icons found')
-            return
-        for pref in ['linuxclienticon', 'clienticon']:
-            if pref in icon_files:
-                extractor = SteamIconExtractor(icon_files[pref], destdir, self.icon_name)
-                extractor.extract()
-                return
 
 
-class SteamIconExtractor(object):
-    def __init__(self, icon_file: Path, datadir: Path, icon_name: str):
-        self._file = icon_file
-        self.datadir = datadir
+class SteamIconContainer(object):
+    def __init__(self, icon_file: Path, icon_name: str):
+        self.path = icon_file
         self.icon_name = icon_name
 
-    def get_dest(self, size: int):
-        destdir = self.datadir / 'icons' / 'hicolor' / f'{size}x{size}' / 'apps'
+    def get_dest(self, size: int, datadir: Path):
+        destdir = datadir / 'icons' / 'hicolor' / f'{size}x{size}' / 'apps'
         if not destdir.is_dir():
             destdir.mkdir(parents=True)
         return destdir / f'{self.icon_name}.png'
 
-    def extract_zip_png(self):
-        with zipfile.ZipFile(self._file, 'r') as zf:
+    def extract(self, datadir: Path):
+        raise NotImplementedError
+
+
+class SteamIconZip(SteamIconContainer):
+    def extract(self, datadir: Path):
+        with zipfile.ZipFile(self.path, 'r') as zf:
             for zi in zf.infolist():
                 if zi.is_dir() or not zi.filename.lower().endswith('.png'):
                     continue
@@ -139,12 +143,14 @@ class SteamIconExtractor(object):
                     assert h == w
                     assert img.format == 'PNG'
                     img_file.seek(0)
-                    with open(self.get_dest(h), 'wb') as d:
+                    with open(self.get_dest(h, datadir), 'wb') as d:
                         d.write(img_file.read())
                     img.close()
 
-    def extract_ico(self):
-        with Image.open(self._file) as img:
+
+class SteamIconICO(SteamIconContainer):
+    def extract(self, datadir: Path):
+        with Image.open(self.path) as img:
             assert img.format == 'ICO'
             for size in img.ico.sizes():
                 subimg = img.ico.getimage(size)
@@ -153,16 +159,7 @@ class SteamIconExtractor(object):
                 if subimg.size != size:
                     logging.warning(f'Expected size {size[0]}x{size[1]}, got {h}x{w}')
                 logging.debug(f'Saving icon size {h}x{w}')
-                subimg.save(self.get_dest(h), format='PNG')
-
-    def extract(self):
-        logging.info(f'Extracting icon(s) from {self._file}')
-        if zipfile.is_zipfile(self._file):
-            logging.debug(f'{self._file} appears to be a zip file')
-            self.extract_zip_png()
-        elif self._file.suffix == '.ico':
-            logging.debug(f'Saving icon {self._file}')
-            self.extract_ico()
+                subimg.save(self.get_dest(h, datadir), format='PNG')
 
 
 def get_installed_apps(steam_root: Path):
