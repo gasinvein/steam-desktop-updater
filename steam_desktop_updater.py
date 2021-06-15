@@ -205,18 +205,28 @@ def get_installed_apps(steam_root: Path):
     return apps
 
 
-def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str = 'xdg-open'):
-    logging.info('Loading appinfo.vdf')
+def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str = DEFAULT_STEAM_CMD):
+    installed_apps = get_installed_apps(steam_root)
+
+    search_ids = {v for k, v in installed_apps}
+    logging.info(f'Loading {len(search_ids)} apps from appinfo.vdf')
     appinfo_data = {}
     with (steam_root / 'appcache' / 'appinfo.vdf').open('rb') as af:
         _, apps_gen = appcache.parse_appinfo(af)
         for app in apps_gen:
-            appinfo_data[app['appid']] = app['data']['appinfo']
+            appid = app['appid']
+            assert isinstance(appid, int)
+            if appid in search_ids:
+                appinfo_data[appid] = app['data']['appinfo']
+                search_ids.remove(appid)
+                logging.debug(f'Loaded app ID {appid}, {len(search_ids)} apps left')
+            if not search_ids:
+                break
 
     if destdir is None:
         destdir = Path('~/.local/share').expanduser()
 
-    for library_folder, app_id in get_installed_apps(steam_root):
+    for library_folder, app_id in installed_apps:
         app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[app_id])
         if not app.is_game():
             continue
