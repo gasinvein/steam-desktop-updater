@@ -2,11 +2,14 @@
 
 import sys
 import os
+from pathlib import *
 import io
 import glob
 import zipfile
 from configparser import ConfigParser
 import logging
+import typing as t
+
 from PIL import Image
 import vdf
 from steam.utils import appcache
@@ -24,7 +27,7 @@ class DesktopFileParser(ConfigParser):
 
 
 class SteamApp(object):
-    def __init__(self, steam_root, app_id, app_info):
+    def __init__(self, steam_root: Path, app_id: int, app_info: t.Mapping):
         self.app_id = app_id
         self.app_info = app_info
         self.steam_root = steam_root
@@ -37,29 +40,28 @@ class SteamApp(object):
                 return True
         return False
 
-    def is_installed(self, library_folder):
-        app_dir = os.path.join(library_folder, 'steamapps', 'common',
-                               self.app_info['config']['installdir'])
-        if os.path.isdir(app_dir):
+    def is_installed(self, library_folder: Path):
+        installdir = self.app_info['config']['installdir']
+        app_dir = library_folder / 'steamapps' / 'common' / installdir
+        if app_dir.is_dir():
             for i, launch in self.app_info['config']['launch'].items():
                 assert i.isdigit()
-                bin_path = launch['executable']
                 try:
                     oslist = launch['config']['oslist']
+                    is_windows = 'windows' in oslist
                 except KeyError:
                     # Assume it's windows-only game
-                    oslist = ['windows']
-                if 'windows' in oslist:
-                    bin_path = bin_path.replace('\\', '/')
-                bin_path_abs = os.path.join(app_dir, bin_path)
-                if os.path.isfile(bin_path_abs):
+                    is_windows = True
+                path_cls = PureWindowsPath if is_windows else PurePosixPath
+                bin_path_abs = app_dir / path_cls(launch['executable'])
+                if bin_path_abs.is_file():
                     return True
         return False
 
     def get_name(self):
         return self.app_info['common']['name']
 
-    def get_desktop_entry(self, steam_cmd=DEFAULT_STEAM_CMD):
+    def get_desktop_entry(self, steam_cmd: str = DEFAULT_STEAM_CMD):
         app_name = self.get_name()
         return {
             'Desktop Entry': {
@@ -72,13 +74,12 @@ class SteamApp(object):
             }
         }
 
-    def save_desktop_entry(self, destdir, steam_cmd=DEFAULT_STEAM_CMD):
+    def save_desktop_entry(self, destdir: Path, steam_cmd: str = DEFAULT_STEAM_CMD):
         app_desktop = DesktopFileParser()
         app_desktop.read_dict(self.get_desktop_entry())
-        apps_destdir = os.path.join(destdir, 'applications')
-        app_desktop_file = f'{self.desktop_name}.desktop'
-        os.makedirs(apps_destdir, exist_ok=True)
-        with open(os.path.join(apps_destdir, app_desktop_file), 'w') as df:
+        app_desktop_file = destdir / 'applications' / f'{self.desktop_name}.desktop'
+        app_desktop_file.parent.mkdir(parents=True, exist_ok=True)
+        with app_desktop_file.open('w') as df:
             app_desktop.write(df, space_around_delimiters=False)
 
     def get_icon_files(self):
@@ -87,13 +88,13 @@ class SteamApp(object):
         """
         icon_files = {}
         common_info = self.app_info['common']
-        icons_dir = os.path.join(self.steam_root, 'steam', 'games')
+        icons_dir = self.steam_root / 'steam' / 'games'
         for i, e in [('linuxclienticon', 'zip'), ('clienticon', 'ico')]:
             if i in common_info:
                 icon_hash = common_info[i]
                 logging.debug(f'{i} is set, searching it... ')
-                icon_path = os.path.join(icons_dir, f'{icon_hash}.{e}')
-                if os.path.isfile(icon_path):
+                icon_path = icons_dir / f'{icon_hash}.{e}'
+                if icon_path.is_file():
                     logging.debug(f'found {icon_path}')
                     icon_files[i] = icon_path
         return icon_files
@@ -111,16 +112,16 @@ class SteamApp(object):
 
 
 class SteamIconExtractor(object):
-    def __init__(self, icon_file, datadir, icon_name):
+    def __init__(self, icon_file: Path, datadir: Path, icon_name: str):
         self._file = icon_file
         self.datadir = datadir
         self.icon_name = icon_name
 
-    def get_dest(self, size):
-        destdir = os.path.join(self.datadir, 'icons', 'hicolor', f'{size}x{size}', 'apps')
-        if not os.path.isdir(destdir):
-            os.makedirs(destdir)
-        return os.path.join(destdir, f'{self.icon_name}.png')
+    def get_dest(self, size: int):
+        destdir = self.datadir / 'icons' / 'hicolor' / f'{size}x{size}' / 'apps'
+        if not destdir.is_dir():
+            destdir.mkdir(parents=True)
+        return destdir / f'{self.icon_name}.png'
 
     def extract_zip_png(self):
         with zipfile.ZipFile(self._file, 'r') as zf:
@@ -159,39 +160,39 @@ class SteamIconExtractor(object):
         if zipfile.is_zipfile(self._file):
             logging.debug(f'{self._file} appears to be a zip file')
             self.extract_zip_png()
-        elif self._file.endswith('.ico'):
+        elif self._file.suffix == '.ico':
             logging.debug(f'Saving icon {self._file}')
             self.extract_ico()
 
 
-def get_installed_apps(steam_root):
+def get_installed_apps(steam_root: Path):
     """
     Enumerate IDs of installed apps in given library
     """
     apps = []
     logging.info('Searching library folders')
-    with open(os.path.join(steam_root, 'steamapps', 'libraryfolders.vdf'), 'r') as lf:
+    with (steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
         library_folders = vdf.load(lf)['LibraryFolders']
-        for folder_path in [steam_root] + [v for k, v in library_folders.items() if k.isdigit()]:
+        for folder_path in [steam_root] + [Path(v) for k, v in library_folders.items() if k.isdigit()]:
             logging.info(f'Collecting apps in folder {folder_path}')
-            for app in glob.glob(os.path.join(folder_path, 'steamapps', 'appmanifest_*.acf')):
-                with open(app, 'r') as amf:
+            for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
+                with app.open('r') as amf:
                     app_mainfest = vdf.load(amf)
                     app_state = {k.lower(): v for k, v in app_mainfest['AppState'].items()}
                     apps.append((folder_path, int(app_state['appid'])))
     return apps
 
 
-def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
+def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str = 'xdg-open'):
     logging.info('Loading appinfo.vdf')
     appinfo_data = {}
-    with open(os.path.join(steam_root, 'appcache', 'appinfo.vdf'), 'rb') as af:
+    with (steam_root / 'appcache' / 'appinfo.vdf').open('rb') as af:
         _, apps_gen = appcache.parse_appinfo(af)
         for app in apps_gen:
             appinfo_data[app['appid']] = app['data']['appinfo']
 
     if destdir is None:
-        destdir = os.path.join(os.environ.get('HOME'), '.local', 'share')
+        destdir = Path('~/.local/share').expanduser()
 
     for library_folder, app_id in get_installed_apps(steam_root):
         app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[app_id])
@@ -207,9 +208,12 @@ def create_desktop_data(steam_root, destdir=None, steam_cmd='xdg-open'):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Create desktop entries for Steam games.')
-    parser.add_argument('steam_root', help='Path to Steam root directory, e.g. ~/.local/share/Steam')
-    parser.add_argument('-d', '--datatir', default=None, required=False, help='Destination data dir where to create files (defaults to ~/.local/share)')
-    parser.add_argument('-c', '--steam-command', default='xdg-open', required=False, help='Steam command (defaults to xdg-open)')
+    parser.add_argument('steam_root', type=Path,
+                        help='Path to Steam root directory, e.g. ~/.local/share/Steam')
+    parser.add_argument('-d', '--datatir', type=Path, default=None, required=False,
+                        help='Destination data dir where to create files (defaults to ~/.local/share)')
+    parser.add_argument('-c', '--steam-command', default='xdg-open', required=False,
+                        help='Steam command (defaults to xdg-open)')
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     create_desktop_data(steam_root=args.steam_root, destdir=args.datatir, steam_cmd=args.steam_command)
