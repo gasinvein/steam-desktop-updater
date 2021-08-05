@@ -178,33 +178,32 @@ class SteamInstallation(object):
     def __init__(self, steam_root: Path):
         self.steam_root = steam_root
 
-    def _get_folder_paths(self, library_folders: dict):
-        paths = [self.steam_root]
-        for k, v in library_folders.items():
-            if not k.isdigit():
-                continue
-            if isinstance(v, dict) and "path" in v:
-                paths.append(Path(v["path"]))
-            else:
-                paths.append(Path(v))
-        return paths
+    def read_library_folders(self) -> t.List[t.Union[str, t.Mapping]]:
+        with (self.steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
+            loaded_vdf_dict = {k.lower(): v for k, v in vdf.load(lf).items()}
+        library_folders = loaded_vdf_dict["libraryfolders"]
+        return [v for k, v in library_folders.items() if k.isdigit()]
 
     def get_installed_apps(self):
         """
         Enumerate IDs of installed apps in given library
         """
+        def _getpath(folder_obj):
+            if isinstance(folder_obj, dict):
+                return Path(folder_obj["path"])
+            if isinstance(folder_obj, str):
+                return Path(folder_obj)
+            raise TypeError(folder_obj)
         apps = []
         logging.info('Searching library folders')
-        with (self.steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
-            loaded_vdf_dict = {k.lower(): v for k, v in vdf.load(lf).items()}
-            library_folders = loaded_vdf_dict["libraryfolders"]
-            for folder_path in self._get_folder_paths(library_folders):
-                logging.info(f'Collecting apps in folder {folder_path}')
-                for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
-                    with app.open('r') as amf:
-                        app_mainfest = vdf.load(amf)
-                        app_state = {k.lower(): v for k, v in app_mainfest['AppState'].items()}
-                        apps.append((folder_path, int(app_state['appid'])))
+        library_paths = [_getpath(f) for f in self.read_library_folders()]
+        for folder_path in [self.steam_root] + library_paths:
+            logging.info(f'Collecting apps in folder {folder_path}')
+            for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
+                with app.open('r') as amf:
+                    app_mainfest = vdf.load(amf)
+                    app_state = {k.lower(): v for k, v in app_mainfest['AppState'].items()}
+                    apps.append((folder_path, int(app_state['appid'])))
         return apps
 
 
