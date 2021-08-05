@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 
-import sys
-import os
 from pathlib import *
-import io
-import glob
 import zipfile
 from configparser import ConfigParser
 import logging
@@ -76,7 +72,7 @@ class SteamApp(object):
 
     def save_desktop_entry(self, destdir: Path, steam_cmd: str = DEFAULT_STEAM_CMD):
         app_desktop = DesktopFileParser()
-        app_desktop.read_dict(self.get_desktop_entry())
+        app_desktop.read_dict(self.get_desktop_entry(steam_cmd))
         app_desktop_file = destdir / 'applications' / f'{self.desktop_name}.desktop'
         app_desktop_file.parent.mkdir(parents=True, exist_ok=True)
         with app_desktop_file.open('w') as df:
@@ -90,9 +86,9 @@ class SteamApp(object):
         common_info = self.app_info['common']
         icons_dir = self.steam_root / 'steam' / 'games'
         for icon_kind, icon_ext, container in [
-                ('linuxclienticon', 'zip', SteamIconZip),
-                ('clienticon', 'ico', SteamIconICO)
-            ]:
+            ('linuxclienticon', 'zip', SteamIconZip),
+            ('clienticon', 'ico', SteamIconICO)
+        ]:
             if icon_kind in common_info:
                 icon_hash = common_info[icon_kind]
                 logging.debug(f'{icon_kind} is set, searching it... ')
@@ -178,6 +174,18 @@ class SteamIconICO(SteamIconContainer):
             subimg.save(self.get_dest(h, datadir), format='PNG')
 
 
+def _get_folder_paths(steam_root: Path, library_folders: dict):
+    paths = [steam_root]
+    for k, v in library_folders.items():
+        if not k.isdigit():
+            continue
+        if isinstance(v, dict) and "path" in v:
+            paths.append(Path(v["path"]))
+        else:
+            paths.append(Path(v))
+    return paths
+
+
 def get_installed_apps(steam_root: Path):
     """
     Enumerate IDs of installed apps in given library
@@ -185,8 +193,9 @@ def get_installed_apps(steam_root: Path):
     apps = []
     logging.info('Searching library folders')
     with (steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
-        library_folders = vdf.load(lf)['LibraryFolders']
-        for folder_path in [steam_root] + [Path(v) for k, v in library_folders.items() if k.isdigit()]:
+        loaded_vdf_dict = {k.lower(): v for k, v in vdf.load(lf).items()}
+        library_folders = loaded_vdf_dict["libraryfolders"]
+        for folder_path in _get_folder_paths(steam_root, library_folders):
             logging.info(f'Collecting apps in folder {folder_path}')
             for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
                 with app.open('r') as amf:
@@ -214,7 +223,7 @@ def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str =
         if not app.is_installed(library_folder):
             continue
         logging.info(f'Processing app ID {app_id} : {app.get_name()}')
-        app.save_desktop_entry(destdir)
+        app.save_desktop_entry(destdir, steam_cmd)
         app.extract_icons(destdir)
 
 
