@@ -174,6 +174,18 @@ class SteamIconICO(SteamIconContainer):
             subimg.save(self.get_dest(h, datadir), format='PNG')
 
 
+def _get_folder_paths(steam_root: Path, library_folders: dict):
+    paths = [steam_root]
+    for k, v in library_folders.items():
+        if not k.isdigit():
+            continue
+        if isinstance(v, dict) and "path" in v:
+            paths.append(Path(v["path"]))
+        else:
+            paths.append(v)
+    return paths
+
+
 def get_installed_apps(steam_root: Path):
     """
     Enumerate IDs of installed apps in given library
@@ -181,8 +193,9 @@ def get_installed_apps(steam_root: Path):
     apps = []
     logging.info('Searching library folders')
     with (steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
-        library_folders = {k.lower(): v for k, v in vdf.load(lf).items()}["libraryfolders"]
-        for folder_path in [steam_root] + [Path(v["path"]) if isinstance(v, dict) else Path(v) for k, v in library_folders.items() if k.isdigit()]:
+        loaded_vdf_dict = {k.lower(): v for k, v in vdf.load(lf).items()}
+        library_folders = loaded_vdf_dict["libraryfolders"]
+        for folder_path in _get_folder_paths(steam_root, library_folders):
             logging.info(f'Collecting apps in folder {folder_path}')
             for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
                 with app.open('r') as amf:
