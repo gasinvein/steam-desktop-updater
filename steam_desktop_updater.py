@@ -182,7 +182,7 @@ def _get_folder_paths(steam_root: Path, library_folders: dict):
         if isinstance(v, dict) and "path" in v:
             paths.append(Path(v["path"]))
         else:
-            paths.append(v)
+            paths.append(Path(v))
     return paths
 
 
