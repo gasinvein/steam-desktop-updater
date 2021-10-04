@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from pathlib import *
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import zipfile
 from configparser import ConfigParser
 import logging
