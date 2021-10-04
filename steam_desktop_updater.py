@@ -91,21 +91,20 @@ class SteamApp(object):
         ]:
             if icon_kind in common_info:
                 icon_hash = common_info[icon_kind]
-                logging.debug(f'{icon_kind} is set, searching it... ')
+                logging.debug('%s is set, searching it...', icon_kind)
                 icon_path = icons_dir / f'{icon_hash}.{icon_ext}'
                 if icon_path.is_file():
-                    logging.debug(f'found {icon_path}')
+                    logging.debug('found %s', icon_path)
                     icon_containers.append(container(icon_path, self.icon_name))
         return icon_containers
 
     def extract_icons(self, destdir: Path):
         for icon_file in self.get_icon_files():
-            logging.info(f'Extracting icon(s) from {icon_file.path}')
+            logging.info('Extracting icon(s) from %s', icon_file.path)
             with icon_file:
                 icon_file.extract(destdir)
-            return 
-        else:
-            logging.warning(f'No icons found')
+            return
+        logging.warning('No icons found')
 
 
 class SteamIconContainer(object):
@@ -140,12 +139,12 @@ class SteamIconZip(SteamIconContainer):
         for zi in self.file.infolist():
             if zi.is_dir() or not zi.filename.lower().endswith('.png'):
                 continue
-            logging.debug(f'Saving icon {zi.filename}')
+            logging.debug('Saving icon %s', zi.filename)
             with self.file.open(zi.filename) as img_file:
                 try:
                     img = Image.open(img_file)
                 except OSError as e:
-                    logging.warning(f'{self.path.name}: {e}')
+                    logging.warning('%s: %s', self.path.name, e)
                     continue
                 h, w = img.size
                 assert h == w
@@ -169,8 +168,8 @@ class SteamIconICO(SteamIconContainer):
             h, w = subimg.size
             assert h == w
             if subimg.size != size:
-                logging.warning(f'Expected size {size[0]}x{size[1]}, got {h}x{w}')
-            logging.debug(f'Saving icon size {h}x{w}')
+                logging.warning('Expected size %ix%i, got %ix%i', size, size, h, w)
+            logging.debug('Saving icon size %ix%i', h, w)
             subimg.save(self.get_dest(h, datadir), format='PNG')
 
 
@@ -198,7 +197,7 @@ class SteamInstallation(object):
         logging.info('Searching library folders')
         library_paths = [_getpath(f) for f in self.read_library_folders()]
         for folder_path in [self.steam_root] + library_paths:
-            logging.info(f'Collecting apps in folder {folder_path}')
+            logging.info('Collecting apps in folder %s', folder_path)
             for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
                 with app.open('r') as amf:
                     app_mainfest = vdf.load(amf)
@@ -212,7 +211,7 @@ def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str =
     installed_apps = steam.get_installed_apps()
 
     search_ids = {v for k, v in installed_apps}
-    logging.info(f'Loading {len(search_ids)} apps from appinfo.vdf')
+    logging.info('Loading %i apps from appinfo.vdf', len(search_ids))
     appinfo_data = {}
     with (steam_root / 'appcache' / 'appinfo.vdf').open('rb') as af:
         _, apps_gen = appcache.parse_appinfo(af)
@@ -222,7 +221,7 @@ def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str =
             if appid in search_ids:
                 appinfo_data[appid] = app['data']['appinfo']
                 search_ids.remove(appid)
-                logging.debug(f'Loaded app ID {appid}, {len(search_ids)} apps left')
+                logging.debug('Loaded app ID %s, %i apps left', appid, len(search_ids))
             if not search_ids:
                 break
 
@@ -235,7 +234,7 @@ def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str =
             continue
         if not app.is_installed(library_folder):
             continue
-        logging.info(f'Processing app ID {app_id} : {app.get_name()}')
+        logging.info('Processing app ID %s : %s', app_id, app.get_name())
         app.save_desktop_entry(destdir, steam_cmd)
         app.extract_icons(destdir)
 
