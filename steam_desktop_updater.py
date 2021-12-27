@@ -175,7 +175,7 @@ class SteamIconICO(SteamIconContainer):
 
 class SteamInstallation(object):
     def __init__(self, steam_root: Path):
-        self.steam_root = steam_root
+        self.steam_root = steam_root.resolve()
 
     def read_library_folders(self) -> t.List[t.Union[str, t.Mapping]]:
         with (self.steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
@@ -195,8 +195,8 @@ class SteamInstallation(object):
             raise TypeError(folder_obj)
         apps = []
         logging.info('Searching library folders')
-        library_paths = [_getpath(f) for f in self.read_library_folders()]
-        for folder_path in [self.steam_root] + library_paths:
+        library_paths = {_getpath(f).resolve() for f in self.read_library_folders()}
+        for folder_path in {self.steam_root} | library_paths:
             logging.info('Collecting apps in folder %s', folder_path)
             for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
                 with app.open('r') as amf:
@@ -213,7 +213,7 @@ def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str =
     search_ids = {v for k, v in installed_apps}
     logging.info('Loading %i apps from appinfo.vdf', len(search_ids))
     appinfo_data = {}
-    with (steam_root / 'appcache' / 'appinfo.vdf').open('rb') as af:
+    with (steam.steam_root / 'appcache' / 'appinfo.vdf').open('rb') as af:
         _, apps_gen = appcache.parse_appinfo(af)
         for app in apps_gen:
             appid = app['appid']
@@ -229,7 +229,7 @@ def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str =
         destdir = Path('~/.local/share').expanduser()
 
     for library_folder, app_id in installed_apps:
-        app = SteamApp(steam_root=steam_root, app_id=app_id, app_info=appinfo_data[app_id])
+        app = SteamApp(steam_root=steam.steam_root, app_id=app_id, app_info=appinfo_data[app_id])
         if not app.is_game():
             continue
         if not app.is_installed(library_folder):
