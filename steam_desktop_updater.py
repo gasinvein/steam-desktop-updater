@@ -30,6 +30,11 @@ class SteamApp(object):
         self.desktop_name = f'steam_app_{app_id}'
         self.icon_name = f'steam_icon_{app_id}'
 
+    @property
+    def name(self):
+        return self.app_info['common']['name']
+
+    @property
     def is_game(self):
         if 'common' in self.app_info:
             if self.app_info['common']['type'].lower() == 'game':
@@ -54,15 +59,11 @@ class SteamApp(object):
                     return True
         return False
 
-    def get_name(self):
-        return self.app_info['common']['name']
-
     def get_desktop_entry(self, steam_cmd: str = DEFAULT_STEAM_CMD):
-        app_name = self.get_name()
         return {
             'Desktop Entry': {
                 'Type': 'Application',
-                'Name': app_name,
+                'Name': self.name,
                 'Comment': 'Launch this game via Steam',
                 'Exec': f'{steam_cmd} steam://rungameid/{self.app_id}',
                 'Icon': self.icon_name,
@@ -230,11 +231,11 @@ def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str =
 
     for library_folder, app_id in installed_apps:
         app = SteamApp(steam_root=steam.steam_root, app_id=app_id, app_info=appinfo_data[app_id])
-        if not app.is_game():
+        if not app.is_game:
             continue
         if not app.is_installed(library_folder):
             continue
-        logging.info('Processing app ID %s : %s', app_id, app.get_name())
+        logging.info('Processing app ID %s : %s', app_id, app.name)
         app.save_desktop_entry(destdir, steam_cmd)
         app.extract_icons(destdir)
 
