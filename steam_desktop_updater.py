@@ -17,6 +17,13 @@ ICON_SIZES = {
 DEFAULT_STEAM_CMD = 'xdg-open'
 
 
+class SteamIconReadError(Exception):
+    def __str__(self):
+        if self.__cause__ is not None:
+            return str(self.__cause__)
+        return super().__str__()
+
+
 class DesktopFileParser(ConfigParser):
     def optionxform(self, option):
         return option
@@ -102,10 +109,14 @@ class SteamApp(object):
     def extract_icons(self, destdir: Path):
         for icon_file in self.get_icon_files():
             logging.info('Extracting icon(s) from %s', icon_file.path)
-            with icon_file:
-                icon_file.extract(destdir)
-            return
-        logging.warning('No icons found')
+            try:
+                with icon_file:
+                    icon_file.extract(destdir)
+                return
+            except SteamIconReadError as err:
+                logging.error("Failed to read Steam icon container %s: %s", icon_file.path, err)
+                continue
+        logging.warning('No usable icons found')
 
 
 class SteamIconContainer(object):
@@ -132,7 +143,10 @@ class SteamIconContainer(object):
 
 class SteamIconZip(SteamIconContainer):
     def __enter__(self):
-        self.file = zipfile.ZipFile(self.path, 'r')
+        try:
+            self.file = zipfile.ZipFile(self.path, 'r')
+        except zipfile.BadZipFile as err:
+            raise SteamIconReadError from err
         return self
 
     def extract(self, datadir: Path):
@@ -158,7 +172,10 @@ class SteamIconZip(SteamIconContainer):
 
 class SteamIconICO(SteamIconContainer):
     def __enter__(self):
-        self.file = Image.open(self.path)
+        try:
+            self.file = Image.open(self.path)
+        except OSError as err:
+            raise SteamIconReadError from err
         return self
 
     def extract(self, datadir: Path):
