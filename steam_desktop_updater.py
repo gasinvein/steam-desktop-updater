@@ -195,26 +195,26 @@ class SteamInstallation(object):
     def __init__(self, steam_root: Path):
         self.steam_root = steam_root.resolve()
 
-    def read_library_folders(self) -> t.List[t.Union[str, t.Mapping]]:
-        with (self.steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
-            loaded_vdf_dict = {k.lower(): v for k, v in vdf.load(lf).items()}
-        library_folders = loaded_vdf_dict["libraryfolders"]
-        return [v for k, v in library_folders.items() if k.isdigit()]
-
-    def get_installed_apps(self):
-        """
-        Enumerate IDs of installed apps in given library
-        """
-        def _getpath(folder_obj):
+    @property
+    def library_folders(self) -> t.List[Path]:
+        def _getpath(folder_obj: t.Union[str, dict]) -> Path:
             if isinstance(folder_obj, dict):
                 return Path(folder_obj["path"])
             if isinstance(folder_obj, str):
                 return Path(folder_obj)
             raise TypeError(folder_obj)
+        with (self.steam_root / 'steamapps' / 'libraryfolders.vdf').open('r') as lf:
+            loaded_vdf_dict = {k.lower(): v for k, v in vdf.load(lf).items()}
+        library_folders = loaded_vdf_dict["libraryfolders"]
+        return [_getpath(v).resolve() for k, v in library_folders.items() if k.isdigit()]
+
+    def get_installed_apps(self):
+        """
+        Enumerate IDs of installed apps in given library
+        """
         apps = []
         logging.info('Searching library folders')
-        library_paths = {_getpath(f).resolve() for f in self.read_library_folders()}
-        for folder_path in {self.steam_root} | library_paths:
+        for folder_path in {self.steam_root} | set(self.library_folders):
             logging.info('Collecting apps in folder %s', folder_path)
             for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
                 with app.open('r') as amf:
