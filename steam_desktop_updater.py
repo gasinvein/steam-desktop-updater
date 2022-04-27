@@ -30,10 +30,11 @@ class DesktopFileParser(ConfigParser):
 
 
 class SteamApp(object):
-    def __init__(self, steam_root: Path, app_id: int, app_info: t.Mapping):
+    def __init__(self, steam_root: Path, library_folder: Path, app_id: int, app_info: t.Mapping):
         self.app_id = app_id
         self.app_info = app_info
         self.steam_root = steam_root
+        self.library_folder = library_folder
         self.desktop_name = f'steam_app_{app_id}'
         self.icon_name = f'steam_icon_{app_id}'
 
@@ -48,9 +49,10 @@ class SteamApp(object):
                 return True
         return False
 
-    def is_installed(self, library_folder: Path):
+    @property
+    def is_installed(self) -> bool:
         installdir = self.app_info['config']['installdir']
-        app_dir = library_folder / 'steamapps' / 'common' / installdir
+        app_dir = self.library_folder / 'steamapps' / 'common' / installdir
         if app_dir.is_dir():
             for i, launch in self.app_info['config']['launch'].items():
                 assert i.isdigit()
@@ -192,8 +194,29 @@ class SteamIconICO(SteamIconContainer):
 
 
 class SteamInstallation(object):
+    steam_root: Path
+    _appinfo: t.Dict[int, t.Dict]
+    _appinfo_fp: t.Optional[t.IO]
+    _appinfo_header: t.Optional[t.Dict[str, t.Any]]
+    _appinfo_reader: t.Optional[t.Generator[t.Dict[str, t.Any], None, None]]
+
     def __init__(self, steam_root: Path):
         self.steam_root = steam_root.resolve()
+        self._appinfo = {}
+        self._appinfo_fp = None
+        self._appinfo_header = None
+        self._appinfo_reader = None
+
+    def __enter__(self):
+        self._appinfo_fp = (self.steam_root / 'appcache' / 'appinfo.vdf').open('rb')
+        self._appinfo_header, self._appinfo_reader = appcache.parse_appinfo(self._appinfo_fp)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self._appinfo_header = None
+        self._appinfo_reader = None
+        self._appinfo_fp.close()
+        self._appinfo_fp = None
 
     @property
     def library_folders(self) -> t.List[Path]:
@@ -208,51 +231,50 @@ class SteamInstallation(object):
         library_folders = loaded_vdf_dict["libraryfolders"]
         return [_getpath(v).resolve() for k, v in library_folders.items() if k.isdigit()]
 
-    def get_installed_apps(self):
+    def read_appinfo(self, app_id: int) -> t.Dict[str, t.Any]:
+        if app_id not in self._appinfo:
+            logging.info('Searching appinfo.vdf for app ID %i', app_id)
+            assert self._appinfo_reader is not None
+            # Resume appcache.parse_appinfo generator from where we stopped previously;
+            # read apps until we find needed ID, caching all other apps along the way
+            for app_appinfo in self._appinfo_reader:
+                if app_appinfo['appid'] not in self._appinfo:
+                    self._appinfo[app_appinfo['appid']] = app_appinfo
+                if app_appinfo['appid'] == app_id:
+                    break
+        return self._appinfo[app_id]
+
+    def read_installed_apps(self) -> t.Iterable[SteamApp]:
         """
         Enumerate IDs of installed apps in given library
         """
-        apps = []
-        logging.info('Searching library folders')
         for folder_path in {self.steam_root} | set(self.library_folders):
             logging.info('Collecting apps in folder %s', folder_path)
-            for app in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
-                with app.open('r') as amf:
-                    app_mainfest = vdf.load(amf)
-                    app_state = {k.lower(): v for k, v in app_mainfest['AppState'].items()}
-                    apps.append((folder_path, int(app_state['appid'])))
-        return apps
+            for appmanifest_path in (folder_path / 'steamapps').glob('appmanifest_*.acf'):
+                with appmanifest_path.open('r') as amf:
+                    appmanifest = vdf.load(amf)
+                app_state = {k.lower(): v for k, v in appmanifest['AppState'].items()}
+                app_id = int(app_state['appid'])
+                app_appinfo = self.read_appinfo(app_id)
+                yield SteamApp(self.steam_root,
+                               folder_path,
+                               app_id,
+                               app_appinfo['data']['appinfo'])
 
 
 def create_desktop_data(steam_root: Path, destdir: Path = None, steam_cmd: str = DEFAULT_STEAM_CMD):
-    steam = SteamInstallation(steam_root)
-    installed_apps = steam.get_installed_apps()
-
-    search_ids = {v for k, v in installed_apps}
-    logging.info('Loading %i apps from appinfo.vdf', len(search_ids))
-    appinfo_data = {}
-    with (steam.steam_root / 'appcache' / 'appinfo.vdf').open('rb') as af:
-        _, apps_gen = appcache.parse_appinfo(af)
-        for app in apps_gen:
-            appid = app['appid']
-            assert isinstance(appid, int)
-            if appid in search_ids:
-                appinfo_data[appid] = app['data']['appinfo']
-                search_ids.remove(appid)
-                logging.debug('Loaded app ID %s, %i apps left', appid, len(search_ids))
-            if not search_ids:
-                break
-
     if destdir is None:
         destdir = Path('~/.local/share').expanduser()
 
-    for library_folder, app_id in installed_apps:
-        app = SteamApp(steam_root=steam.steam_root, app_id=app_id, app_info=appinfo_data[app_id])
+    with SteamInstallation(steam_root) as steam:
+        steam_apps = list(steam.read_installed_apps())
+
+    for app in steam_apps:
         if not app.is_game:
             continue
-        if not app.is_installed(library_folder):
+        if not app.is_installed:
             continue
-        logging.info('Processing app ID %s : %s', app_id, app.name)
+        logging.info('Processing app ID %s : %s', app.app_id, app.name)
         app.save_desktop_entry(destdir, steam_cmd)
         app.extract_icons(destdir)
 
